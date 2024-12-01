@@ -4,8 +4,12 @@ import ReactSelect from 'react-select';
 import GraphVisualizer from './components/Graph';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import {
+  findShortestRoute,
+  findSuccessfulRouteWithStops,
+} from './utils/calculate-routes';
+import { Edge, SuccessfulRoute, SuccessfulRoutes } from './utils/types';
 
-type Edge = { destination: string; distance: number };
 interface SelectOption {
   value: string;
   label: string;
@@ -28,59 +32,17 @@ const buildGraph = (routes: string) => {
   return nodes;
 };
 
-const findSuccessfulRouteWithStops = (
-  graph: Record<string, { edges: Edge[] }>,
-  journey: string[],
-  maxStops: number = 12
-): { route: string[]; totalDistance: number }[] => {
-  const startNode = journey[0];
-  const endNode = journey[journey.length - 1];
-  const requiredStops = journey.slice(1, -1); // stops between start and end
-
-  // Recursive traversal function
-  const traverse = (
-    currentNode: string,
-    path: string[] = [],
-    totalDistance: number = 0,
-    depth: number = 0
-  ): { route: string[]; totalDistance: number }[] => {
-    // If we exceed max stops, return empty
-    if (depth > maxStops) return [];
-
-    const newPath = [...path, currentNode];
-    const newDistance = totalDistance;
-
-    // If we have reached the endNode, check if all required stops are visited
-    if (currentNode === endNode) {
-      const hasAllStops = requiredStops.every(stop => newPath.includes(stop));
-      return hasAllStops ? [{ route: newPath, totalDistance: newDistance }] : [];
-    }
-
-    const successfulRoutes: { route: string[]; totalDistance: number }[] = [];
-
-    // Explore each edge from the current node
-    for (const edge of graph[currentNode]?.edges || []) {
-      // Prevent revisiting nodes in the current path to avoid loops
-      if (!newPath.includes(edge.destination)) {
-        // Accumulate the distance for the current path
-        successfulRoutes.push(
-          ...traverse(edge.destination, newPath, newDistance + edge.distance, depth + 1)
-        );
-      }
-    }
-
-    return successfulRoutes;
-  };
-
-  // Start the traversal from the startNode
-  return traverse(startNode);
-};
-
-
 function App() {
-  const [selectedStops, setSelectedStops] = useState<string[]>(['']);
-  const graph = buildGraph(INPUT_ROUTES)
-  const noSuccessfulRoute = () => toast("Sorry there are no routes that match your selected journey");
+  const [selectedStops, setSelectedStops] = useState<string[]>([]);
+  const [startNode, setStartNode] = useState<string | null>(null);
+  const [endNode, setEndNode] = useState<string | null>(null);
+  const [successfulRoutes, setSuccessfulRoutes] =
+    useState<SuccessfulRoutes | null>(null);
+  const [shortestRoute, setShortestRoute] = useState<SuccessfulRoute | null>(
+    null
+  );
+
+  const graph = buildGraph(INPUT_ROUTES);
 
   const options: SelectOption[] = [
     { value: 'A', label: 'A' },
@@ -104,77 +66,157 @@ function App() {
     const newStops = selectedStops.filter((_, i) => i !== index);
     setSelectedStops(newStops);
   };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  //error handling if no selected. A toast even
+  const handleAllRoutesClick = (e: React.FormEvent) => {
     e.preventDefault();
-    const successfulRoutes = (findSuccessfulRouteWithStops(graph, selectedStops, SANE_LIMIT))
-    console.log(successfulRoutes);
-    if (successfulRoutes.length === 0) {
-      noSuccessfulRoute()
+    if (startNode && endNode) {
+      const successfulRoutes = findSuccessfulRouteWithStops(
+        graph,
+        startNode,
+        endNode,
+        selectedStops,
+        SANE_LIMIT
+      );
+      if (successfulRoutes.length === 0) {
+        toast('Sorry, there are no possible routes to make this journey.');
+      } else {
+        setSuccessfulRoutes(successfulRoutes);
+      }
+    } else {
+      toast('Please select both a start and an end node.');
     }
   };
 
+  const handleShortestRouteClick = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedStops.length > 0) {
+      toast('Please remove all stops to find shortest route.');
+    }
+    if (startNode && endNode) {
+      const successfulRoute = findShortestRoute(graph, startNode, endNode);
+      if (!successfulRoute) {
+        toast(
+          'Sorry, there are no ways to travel between your origin and destination.'
+        );
+      } else {
+        setShortestRoute(successfulRoute);
+      }
+    } else {
+      toast('Please select both a start and an end node.');
+    }
+  };
+  console.log(shortestRoute);
+
   return (
-  
-      <div className="min-h-screen grid grid-rows-[auto_1fr]">
-        <header className="text-black p-4">
-          <h4 className="">NZ Railways Journey Planner</h4>
-        </header>
+    <div className="min-h-screen grid grid-rows-[auto_1fr]">
+      <header className="text-black p-4">
+        <h1 className="">NZ Railways Journey Planner</h1>
+      </header>
 
-        <main className="grid grid-cols-4 gap-4 p-4">
-          <div className="col-span-3 p-4">
-            <h2 className="text-xl font-semibold">Schedule a trip</h2>
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                {selectedStops.map((stop, index) => (
-                  <div key={index} className="mb-4 flex items-center">
-                    <ReactSelect
-                      value={options.find((opt) => opt.value === stop) ?? null}
-                      onChange={(e) => handleStopChange(index, e?.value ?? '')}
-                      options={options}
-                      className="w-24"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveStop(index)}
-                      className="text-red-500"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
+      <main className="grid grid-cols-4 gap-4 p-4">
+        <div className="col-span-3 p-4">
+          <h2 className="text-xl font-semibold">Schedule a trip</h2>
+          <form onSubmit={handleAllRoutesClick}>
+            <div className="mb-4">
+              <label>Origin:</label>
+              <ReactSelect
+                value={options.find((opt) => opt.value === startNode) ?? null}
+                onChange={(e) => setStartNode(e?.value ?? '')}
+                options={options}
+                className="w-24"
+              />
+              {selectedStops.length > 0 && <label>Stops:</label>}
+              {selectedStops.map((stop, index) => (
+                <div key={index} className="mb-4 flex items-center">
+                  <ReactSelect
+                    value={options.find((opt) => opt.value === stop) ?? null}
+                    onChange={(e) => handleStopChange(index, e?.value ?? '')}
+                    options={options}
+                    className="w-24"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveStop(index)}
+                    className="text-red-500"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <label>Destination:</label>
+              <ReactSelect
+                value={options.find((opt) => opt.value === endNode) ?? null}
+                onChange={(e) => setEndNode(e?.value ?? '')}
+                options={options}
+                className="w-24"
+              />
+            </div>
+            <div className="mt-2 gap-2">
+              <button
+                type="button"
+                onClick={handleAddStop}
+                className="px-4 py-2 bg-blue-500 text-white rounded"
+              >
+                Add Stop
+              </button>
+              <button
+                type="submit"
+                className="py-2 px-4 rounded-md focus:outline-none bg-teal"
+              >
+                Find all possible routes
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleShortestRouteClick(e)}
+                className="py-2 px-4 rounded-md focus:outline-none bg-teal"
+              >
+                Find shortest route
+              </button>
+            </div>
+            {successfulRoutes && successfulRoutes.length > 0 && (
+              <div className="mt-6">
+                <h2 className="text-xl font-semibold mb-3">
+                  Calculated result:
+                </h2>
+                <ul className="space-y-4">
+                  {successfulRoutes.map((route, index) => (
+                    <li key={index} className="p-4 border rounded shadow">
+                      <p className="text-lg font-medium">
+                        Route {index + 1}: {route.route.join(' → ')}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Distance: {route.totalDistance} km
+                      </p>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <div className="mt-2 gap-2">
-                <button
-                  type="button"
-                  onClick={handleAddStop}
-                  className="px-4 py-2 bg-blue-500 text-white rounded"
-                >
-                  Add Stop
-                </button>
-                <button
-                  type="submit"
-                  disabled={selectedStops.length <= 1}
-                  className={`py-2 px-4 rounded-md focus:outline-none ${
-                    selectedStops.length <= 1
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-green-500 text-white hover:bg-green-600'
-                  }`}
-                >
-                  Submit
-                </button>
+            )}
+            {shortestRoute && (
+              <div className="mt-6">
+                <h2 className="text-xl font-semibold mb-3">
+                  Calculated result:
+                </h2>
+                <div className="p-4 border rounded shadow">
+                  <p className="text-lg font-medium">
+                    Shortest route: {shortestRoute.route.join(' → ')}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Distance: {shortestRoute.totalDistance} km
+                  </p>
+                </div>
               </div>
-            </form>
-          </div>
-          <div className="col-span-1 p-4">
-            <h2 className="text-xl font-semibold">Journey visualizer</h2>
-            <GraphVisualizer />
-          </div>
-        </main>
-        <ToastContainer />
-      </div>
-
-  );;
+            )}
+          </form>
+        </div>
+        <div className="col-span-1 p-4">
+          <h2 className="text-xl font-semibold">Journey visualizer</h2>
+          <GraphVisualizer />
+        </div>
+      </main>
+      <ToastContainer />
+    </div>
+  );
 }
 
 export default App;
