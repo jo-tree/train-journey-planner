@@ -1,4 +1,4 @@
-import { Edge, SuccessfulRoute, SuccessfulRoutes } from './types';
+import { Edge, SuccessfulRoutes } from './types';
 
 class PriorityQueue {
   private elements: { node: string; priority: number }[] = [];
@@ -17,46 +17,63 @@ class PriorityQueue {
   }
 }
 
-export const findSuccessfulRouteWithStops = (
+// Calculate distance
+// Allow the user to enter a number of stops and then print the distance involved in  traversing the route.
+// If the route cannot be traversed because it is invalid then print out an error message.
+
+export const findRoutes = (
   graph: Record<string, { edges: Edge[] }>,
   startNode: string,
   endNode: string,
-  selectedStops: string[],
-  maxStops: number = 12
+  selectedStops: string[] = [],
+  maxStops: number = 12,
+  exactStops?: number
 ): SuccessfulRoutes => {
-  // Recursive traversal function
   const traverse = (
     currentNode: string,
     path: string[] = [],
     totalDistance: number = 0,
     depth: number = 0
   ): SuccessfulRoutes => {
-    // If we exceed max stops, return empty
-    if (depth > maxStops) return [];
+    // Check if we've exceeded the maximum allowed stops
+    if (maxStops !== undefined && depth > maxStops) return [];
+    if (exactStops !== undefined && depth > exactStops) return [];
 
     const newPath = [...path, currentNode];
-    const newDistance = totalDistance;
-
-    // If we have reached the endNode, check if all required stops are visited
-    if (currentNode === endNode) {
-      const hasAllStops = selectedStops.every((stop) => newPath.includes(stop));
-      return hasAllStops
-        ? [{ route: newPath, totalDistance: newDistance }]
-        : [];
-    }
 
     const successfulRoutes: SuccessfulRoutes = [];
 
-    // Explore each edge from the current node
+    // Check if we've reached the end node (but not on the first move)
+    if (currentNode === endNode && depth > 0) {
+      let constraintsSatisfied = true;
+
+      // Check if all selected stops are included in the path
+      if (selectedStops.length > 0) {
+        constraintsSatisfied = selectedStops.every((stop) =>
+          newPath.includes(stop)
+        );
+      }
+
+      // Check for exact number of stops
+      if (exactStops !== undefined) {
+        constraintsSatisfied = constraintsSatisfied && depth === exactStops;
+      }
+
+      if (constraintsSatisfied) {
+        successfulRoutes.push({ route: newPath, totalDistance });
+      }
+    }
+
+    // Explore adjacent nodes
     for (const edge of graph[currentNode]?.edges || []) {
-      // Prevent revisiting nodes in the current path to avoid loops
-      if (!newPath.includes(edge.destination)) {
-        // Accumulate the distance for the current path
+      // Prevent revisiting nodes to avoid loops
+      // will this cause an issue in the instance where a user selects the same stop more than once
+      if (!newPath.includes(edge.destination) || edge.destination === endNode) {
         successfulRoutes.push(
           ...traverse(
             edge.destination,
             newPath,
-            newDistance + edge.distance,
+            totalDistance + edge.distance,
             depth + 1
           )
         );
@@ -66,15 +83,20 @@ export const findSuccessfulRouteWithStops = (
     return successfulRoutes;
   };
 
-  // Start the traversal from the startNode
   return traverse(startNode);
 };
+
+// What is the shortest route?
+// Allow the user to enter a start and end station (which could be the same station) and
+// then print out the length and details of the shortest route (in terms of distance to travel).
+
+// seperate function to avoid the overhead and expense of finding all routes just to get shortest
 
 export const findShortestRoute = (
   graph: Record<string, { edges: Edge[] }>,
   startNode: string,
   endNode: string
-): SuccessfulRoute | null => {
+): SuccessfulRoutes | null => {
   const distances: Record<string, number> = {};
   const previous: Record<string, string | null> = {};
   const visited: Set<string> = new Set();
@@ -99,7 +121,7 @@ export const findShortestRoute = (
         path.unshift(node);
         node = previous[node];
       }
-      return { route: path, totalDistance: distances[endNode] };
+      return [{ route: path, totalDistance: distances[endNode] }];
     }
 
     if (!visited.has(currentNode)) {
@@ -118,6 +140,6 @@ export const findShortestRoute = (
     }
   }
 
-  // If there's no path to the endNode
+  // If there's no path to the endNode return null
   return null;
 };
