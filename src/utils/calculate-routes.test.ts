@@ -95,14 +95,14 @@ describe('findRoutes Function Tests', () => {
 });
 
 // What is the shortest route?
-// Test data: B to B, A to C  
+// Test data: B to B, A to C
 describe('findShortestRoute Function Tests', () => {
   it('should find the shortest route from B to B with a total distance of 9', () => {
     const result = findShortestRoute(graph, 'B', 'B');
 
     const expectedRoute = ['B'];
     const expectedDistance = 0;
-    console.log(result)
+    console.log(result);
 
     expect(result).not.toBeNull();
     if (result) {

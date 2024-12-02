@@ -35,6 +35,15 @@ export const findRoutes = (
     totalDistance: number = 0,
     depth: number = 0
   ): SuccessfulRoutes => {
+    const MAX_ALLOWED_STOPS = 100;
+
+    // Guard against user entering excessively large maxStops values
+    if (maxStops > MAX_ALLOWED_STOPS) {
+      console.warn(
+        `maxStops exceeds the maximum allowed value of ${MAX_ALLOWED_STOPS}. Setting maxStops to ${MAX_ALLOWED_STOPS}.`
+      );
+      maxStops = MAX_ALLOWED_STOPS;
+    }
     // Check if we've exceeded the maximum allowed stops
     if (maxStops !== undefined && depth > maxStops) return [];
     if (exactStops !== undefined && depth > exactStops) return [];
